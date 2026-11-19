@@ -172,7 +172,7 @@ body{background:var(--cream);color:var(--ink);font-family:-apple-system,"PingFan
 .pdate{font-size:.78rem;color:var(--sub);margin-top:8px}
 .pgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
 .fld{display:flex;flex-direction:column;gap:4px;font-size:.72rem;color:var(--sub)}
-.fld input,.fld select{padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:.85rem;background:#fffdf9;color:var(--ink)}
+.fld input,.fld select,.fld textarea{padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:.85rem;background:#fffdf9;color:var(--ink)}
 .fld input:focus,.fld select:focus{outline:2px solid var(--apricot);outline-offset:1px;border-color:var(--apricot)}
 .btn{margin-top:12px;padding:9px 18px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--apricot),var(--apricot-deep));color:#fff;font:inherit;font-size:.85rem;cursor:pointer;box-shadow:var(--shadow)}
 .btn.alt{background:#fffdf9;color:var(--apricot-deep);border:1px solid var(--apricot);box-shadow:none}
@@ -326,14 +326,11 @@ footer .tiny{font-size:.68rem;margin-top:4px}
     </section>
 
     <section class="panel" id="panel">
-      <button class="toggle" id="panelToggle" type="button">✍️ 现场记一笔（账单 / 心情）<span>密码登录 · 保存后刷新即可同步</span></button>
+      <button class="toggle" id="panelToggle" type="button">✍️ 现场记一笔（账单 / 心情 / 产检）<span>公开记录 · 无需登录</span></button>
       <div class="pbody">
-        <div id="authBox">
-          <p id="authHint">正在连接记账服务…</p>
-          <label class="fld">共同记账密码<input type="password" id="familyPassword" minlength="10" maxlength="128" autocomplete="current-password" placeholder="输入你俩的共同密码"></label>
-          <button class="btn" id="loginBtn" type="button">登录记账</button>
-        </div>
-        <button class="btn alt" id="logoutBtn" type="button" hidden>退出记账</button>
+        <p id="connectionHint" role="status">正在连接记录服务…</p>
+        <button class="btn alt" id="retryBtn" type="button">刷新记录 / 重试连接</button>
+        <p class="pdate">此页面公开，任何访问者都能查看和修改；请勿填写证件号码等敏感信息。</p>
         <p class="pdate" id="panelDate">今天：</p>
         <label class="fld">记录人<select id="fAuthor"><option>妈妈</option><option>爸爸</option></select></label>
         <div class="pgrid">
@@ -351,7 +348,16 @@ footer .tiny{font-size:.68rem;margin-top:4px}
           <label class="fld">一句话（可选）<input id="fNote" placeholder="想记就写一句" maxlength="120"></label>
         </div>
         <button class="btn alt" id="fMoodBtn" type="button">💗 记入今日心情</button>
+        <hr class="phr">
+        <div class="pgrid">
+          <label class="fld">产检项目<input id="fCheckItem" maxlength="80" placeholder="例：B超、血检"></label>
+          <label class="fld">检查结果<textarea id="fCheckResult" maxlength="1000" rows="3"></textarea></label>
+          <label class="fld">下次检查安排<input id="fCheckNext" maxlength="160" placeholder="日期、项目或医生安排"></label>
+        </div>
+        <button class="btn alt" id="fCheckBtn" type="button">保存产检记录</button>
+        <button class="btn alt" id="cancelEdit" type="button">取消编辑 / 新增记录</button>
         <p class="pstatus" id="pStatus" role="status" aria-live="polite"></p>
+        <div id="recordList"></div>
       </div>
     </section>
   </main>
@@ -595,28 +601,19 @@ renderDaily(DAILY);
 
 /* ===== 现场记一笔（免令牌）：页面提交 → 写入服务（钥匙在服务端）→ 仓库自动重建 ===== */
 var WRITE = { url: 'https://douya-records.392442392.workers.dev' };
-var SESSION = '';
-try { SESSION = localStorage.getItem('douya_session') || ''; } catch(e) {}
-var SETUP = new URLSearchParams(location.hash.slice(1)).get('setup') || '';
-var CONFIGURED = false;
 var SERVICE_READY = false;
 function authUI(){
-  $('authBox').hidden = !!SESSION;
-  $('logoutBtn').hidden = !SESSION;
-  $('fExpBtn').disabled = !SESSION;
-  $('fMoodBtn').disabled = !SESSION;
+  ['fExpBtn','fMoodBtn','fCheckBtn'].forEach(function(id){ $(id).disabled = !SERVICE_READY; });
 }
-function rememberSession(value){ SESSION = value; try { if (value) localStorage.setItem('douya_session', value); else localStorage.removeItem('douya_session'); } catch(e) {} authUI(); }
 async function service(path, body){
   var controller = new AbortController();
   var timeout = setTimeout(function(){ controller.abort(); }, 12000);
   var headers = {};
   if (body) headers['Content-Type'] = 'application/json';
-  if (SESSION) headers.Authorization = 'Bearer ' + SESSION;
   try {
     var r = await fetch(WRITE.url + path, { method: body ? 'POST' : 'GET', headers: headers, body: body ? JSON.stringify(body) : undefined, signal: controller.signal });
     var j = await r.json();
-    if (!r.ok){ if (r.status === 401 && path !== '/login') rememberSession(''); throw new Error(j.msg || '连接失败'); }
+    if (!r.ok) throw new Error(j.msg || '连接失败');
     return j;
   } catch(e) {
     if (e.name === 'AbortError') throw new Error('连接记账服务超时，请切换手机流量或Wi-Fi后重试');
@@ -624,40 +621,63 @@ async function service(path, body){
     throw e;
   } finally { clearTimeout(timeout); }
 }
-var APP = { expenses: [], daily: [] };
+var APP = { expenses: [], daily: [], checks: [] };
 function pstatusMsg(m){ $('pStatus').textContent = m; }
 
-function mergedExpenses(){ return EXPENSES.concat(APP.expenses || []); }
+function mergedExpenses(){ return EXPENSES.map(function(x,i){ return Object.assign({id:'original-expense-' + i},x); }).filter(function(x){ return !APP.expenses.some(function(a){ return a.id === x.id; }); }).concat(APP.expenses || []); }
 function mergedDaily(){
-  return DAILY.concat(APP.daily || []);
+  return DAILY.map(function(x,i){ return Object.assign({id:'original-daily-' + i},x); }).map(function(x){ var a = APP.daily.find(function(a){ return a.id === x.id; }); return a ? Object.assign({},x,a) : x; }).concat((APP.daily || []).filter(function(a){ return a.id.indexOf('original-daily-') !== 0; }));
 }
-function rerender(){ renderMoney(mergedExpenses()); renderDaily(mergedDaily(), true); }
+function rerender(){ renderMoney(mergedExpenses()); renderDaily(mergedDaily(), true); renderRecords(); }
+function renderRecords(){
+  var box = $('recordList'); box.innerHTML = '';
+  [['expense','账单',mergedExpenses()],['mood','心情',mergedDaily()],['check','产检',APP.checks || []]].forEach(function(group){
+    var heading = document.createElement('h3'); heading.textContent = group[1] + '记录（点编辑可修改）'; box.appendChild(heading);
+    group[2].slice().sort(function(a,b){ return b.d.localeCompare(a.d); }).forEach(function(entry){
+      var row = document.createElement('article'); row.className = 'day';
+      var text = document.createElement('p');
+      text.textContent = entry.d + ' · ' + (entry.author || '历史记录') + ' · ' + (group[0] === 'expense' ? entry.item + ' ¥' + entry.amt.toFixed(2) : group[0] === 'mood' ? (entry.mood || entry.body || '') + ' ' + (entry.note || '') : entry.item + '：' + entry.result + '；下次：' + entry.next);
+      row.appendChild(text);
+      var button = document.createElement('button'); button.className = 'btn alt'; button.textContent = '编辑'; button.type = 'button';
+      button.addEventListener('click',function(){ editRecord(group[0],entry); }); row.appendChild(button); box.appendChild(row);
+    });
+  });
+}
+function editRecord(type,entry){
+  cancelEditing(); $('fDate').value = entry.d; $('fAuthor').value = entry.author || '妈妈';
+  var button = type === 'expense' ? $('fExpBtn') : type === 'mood' ? $('fMoodBtn') : $('fCheckBtn');
+  button.dataset.recordId = entry.id; button.textContent = '保存修改';
+  if (type === 'expense'){ $('fItem').value = entry.item; $('fAmt').value = entry.amt; $('fBucket').value = entry.bk; }
+  else if (type === 'mood'){ $('fMood').value = entry.mood || ''; $('fNote').value = entry.note || ''; }
+  else { $('fCheckItem').value = entry.item; $('fCheckResult').value = entry.result; $('fCheckNext').value = entry.next; }
+  $('panel').classList.add('open'); $('panelDate').scrollIntoView({behavior:'smooth'}); pstatusMsg('正在编辑 ' + entry.d + ' 的记录。');
+}
+function cancelEditing(){
+  ['fExpBtn','fMoodBtn','fCheckBtn'].forEach(function(id){ delete $(id).dataset.recordId; });
+  $('fExpBtn').textContent = '＋ 记入账本'; $('fMoodBtn').textContent = '💗 记入今日心情'; $('fCheckBtn').textContent = '保存产检记录';
+  ['fItem','fAmt','fMood','fNote','fCheckItem','fCheckResult','fCheckNext'].forEach(function(id){ $(id).value = ''; });
+  $('fDate').value = fmt(TODAY);
+}
 
 async function fetchApp(){
-  if (!SESSION) return;
   try { var j = await service('/records'); APP = j.app; rerender(); }
   catch(e) { pstatusMsg(e.message); }
 }
 async function connectService(){
-  SERVICE_READY = false;
-  $('loginBtn').disabled = true;
-  $('authHint').textContent = '正在连接记账服务（最多12秒）…';
+  SERVICE_READY = false; authUI();
+  $('connectionHint').textContent = '正在连接记录服务（最多12秒）…';
   try {
-    var j = await service('/status');
-    CONFIGURED = j.configured; SERVICE_READY = true;
-    $('authHint').textContent = CONFIGURED ? '输入共同密码即可记账；登录状态记住30天。' : SETUP ? '首次设置：请设一个至少10个字符的共同密码，之后你俩都用它登录。' : '尚未设置密码，请爸爸使用专用设置链接。';
-    $('loginBtn').textContent = CONFIGURED ? '登录记账' : '设置密码并开始记账';
-    $('loginBtn').disabled = !CONFIGURED && !SETUP;
+    var j = await service('/records'); APP = j.app; APP.checks = APP.checks || [];
+    SERVICE_READY = true; rerender();
+    $('connectionHint').textContent = '已连接，可以直接记录和编辑，无需登录。';
   } catch(e) {
-    $('authHint').textContent = e.message;
-    $('loginBtn').textContent = '重试连接';
-    $('loginBtn').disabled = false;
-    pstatusMsg('尚未连接，不会保存任何记录。');
-  }
+    $('connectionHint').textContent = e.message;
+    pstatusMsg('尚未连接，无法保存；已填写内容不会被清除。');
+  } finally { authUI(); }
 }
 connectService();
 authUI();
-fetchApp();
+renderRecords();
 
 async function submitRecord(payload, button, fields){
   button.disabled = true;
@@ -666,7 +686,7 @@ async function submitRecord(payload, button, fields){
     var j = await service('/records', payload);
     APP = j.app; rerender();
     fields.forEach(function(id){ $(id).value = ''; });
-    pstatusMsg('✓ 已保存，另一台设备登录后刷新即可看到。');
+    pstatusMsg('✓ 已保存，其他设备刷新即可看到。');
     return true;
   } catch(e) { pstatusMsg('未保存：' + e.message + '。填写内容已保留，请重试。'); return false; }
   finally { authUI(); }
@@ -675,24 +695,8 @@ async function submitRecord(payload, button, fields){
 (function(){
   $('panel').classList.add('open');
   $('panelToggle').addEventListener('click', function(){ $('panel').classList.toggle('open'); });
-  $('loginBtn').addEventListener('click', async function(){
-    if (!SERVICE_READY){ await connectService(); return; }
-    this.disabled = true;
-    try {
-      var j = await service(CONFIGURED ? '/login' : '/setup', { password: $('familyPassword').value, setup: SETUP });
-      rememberSession(j.session); APP = j.app; rerender();
-      $('familyPassword').value = ''; SETUP = ''; CONFIGURED = true;
-      history.replaceState(null, '', location.pathname + location.search);
-      pstatusMsg('✓ 已登录，可以记录账单和心情。');
-    } catch(e){ pstatusMsg(e.message); }
-    finally { this.disabled = false; }
-  });
-  $('logoutBtn').addEventListener('click', async function(){
-    try { await service('/logout', {}); } catch(e) {}
-    rememberSession(''); APP = { expenses: [], daily: [] }; rerender();
-    $('authHint').textContent = '输入共同密码登录记账。';
-    $('loginBtn').textContent = '登录记账';
-  });
+  $('retryBtn').addEventListener('click', connectService);
+  $('cancelEdit').addEventListener('click',cancelEditing);
   window.addEventListener('focus', fetchApp);
   var wd = '日一二三四五六';
   var wk = Math.floor(DAYS / 7) + '周+' + (DAYS % 7);
@@ -717,7 +721,14 @@ async function submitRecord(payload, button, fields){
     var entry = { id: this.dataset.recordId || crypto.randomUUID(), d: d, author: $('fAuthor').value, mood: mood, note: note };
     this.dataset.recordId = entry.id;
     var button = this;
-    submitRecord({ type: 'mood', entry: entry }, button, ['fMood','fNote']).then(function(ok){ if (ok) delete button.dataset.recordId; });
+    submitRecord({ type: 'mood', entry: entry }, button, ['fMood','fNote']).then(function(ok){ if (ok) { delete button.dataset.recordId; button.textContent = '💗 记入今日心情'; } });
+  });
+  $('fCheckBtn').addEventListener('click',function(){
+    var item = $('fCheckItem').value.trim(); if (!item){ pstatusMsg('请填写产检项目'); return; }
+    var button = this;
+    var entry = {id:this.dataset.recordId || crypto.randomUUID(),d:$('fDate').value || fmt(TODAY),author:$('fAuthor').value,item:item,result:$('fCheckResult').value.trim(),next:$('fCheckNext').value.trim()};
+    this.dataset.recordId = entry.id;
+    submitRecord({type:'check',entry:entry},button,['fCheckItem','fCheckResult','fCheckNext']).then(function(ok){ if(ok){ delete button.dataset.recordId; button.textContent = '保存产检记录'; } });
   });
 })();
 
