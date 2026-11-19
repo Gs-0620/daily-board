@@ -161,6 +161,29 @@ body{background:var(--cream);color:var(--ink);font-family:-apple-system,"PingFan
  .strip span{font-size:19px;margin:0 8px}
 }
 
+/* ---------- 现场记录面板 ---------- */
+.panel{max-width:760px;margin:42px auto 0;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}
+.panel>.toggle{width:100%;padding:14px 20px;background:none;border:0;font:inherit;font-size:.95rem;color:var(--apricot-deep);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.panel>.toggle span{font-size:.72rem;color:var(--sub)}
+.panel>.toggle::after{content:'▾';color:var(--sub)}
+.panel.open>.toggle::after{content:'▴'}
+.panel .pbody{display:none;padding:2px 20px 20px}
+.panel.open .pbody{display:block}
+.pdate{font-size:.78rem;color:var(--sub);margin-top:8px}
+.pgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:.72rem;color:var(--sub)}
+.fld input,.fld select{padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:.85rem;background:#fffdf9;color:var(--ink)}
+.fld input:focus,.fld select:focus{outline:2px solid var(--apricot);outline-offset:1px;border-color:var(--apricot)}
+.btn{margin-top:12px;padding:9px 18px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--apricot),var(--apricot-deep));color:#fff;font:inherit;font-size:.85rem;cursor:pointer;box-shadow:var(--shadow)}
+.btn.alt{background:#fffdf9;color:var(--apricot-deep);border:1px solid var(--apricot);box-shadow:none}
+.pstatus{margin-top:10px;font-size:.74rem;color:var(--sub);min-height:1.2em}
+.phr{border:0;border-top:1px dashed var(--line);margin:20px 0 4px}
+.tok{margin-top:14px;padding:12px 14px;border:1px dashed var(--apricot);border-radius:14px;font-size:.74rem;color:var(--sub);background:#fffaf2}
+.tok input{width:100%;margin:8px 0 4px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:.8rem;background:#fffdf9;color:var(--ink)}
+@media (max-width:700px){
+ .pgrid{grid-template-columns:1fr}
+}
+
 /* ---------- 其他 ---------- */
 footer{text-align:center;color:var(--sub);font-size:.8rem;margin-top:62px;padding-top:18px;border-top:1px solid var(--line)}
 footer .warm{color:#d8a35a;margin-top:8px;font-size:.82rem}
@@ -302,6 +325,35 @@ footer .tiny{font-size:.68rem;margin-top:4px}
       </div>
       <ul id="ledger" class="ledger"></ul>
       <ul class="chips" id="chips"></ul>
+    </section>
+
+    <section class="panel" id="panel">
+      <button class="toggle" id="panelToggle" type="button">✍️ 现场记一笔（账单 / 心情）<span>提交后约 1 分钟全站自动更新 · 访客只读</span></button>
+      <div class="pbody">
+        <p class="pdate" id="panelDate">今天：</p>
+        <div class="pgrid">
+          <label class="fld">日期<input type="date" id="fDate"></label>
+          <label class="fld">账单项目<input id="fItem" placeholder="例：挂号（产科）" maxlength="40"></label>
+          <label class="fld">金额（元）<input type="number" id="fAmt" step="0.01" min="0" placeholder="0.00"></label>
+          <label class="fld">报销桶<select id="fBucket">
+            <option>产检</option><option>挂号</option><option>分娩</option><option>不报销</option>
+          </select></label>
+        </div>
+        <button class="btn" id="fExpBtn" type="button">＋ 记入账本</button>
+        <hr class="phr">
+        <div class="pgrid">
+          <label class="fld">今日心情<input id="fMood" placeholder="例：😀 挺好，就是有点困" maxlength="60"></label>
+          <label class="fld">一句话（可选）<input id="fNote" placeholder="想记就写一句" maxlength="120"></label>
+        </div>
+        <button class="btn alt" id="fMoodBtn" type="button">💗 记入今日心情</button>
+        <p class="pstatus" id="pStatus"></p>
+        <div class="tok" id="tokBox">
+          <p id="tokMsg">第一次用：把 GitHub 令牌粘到下面（只存本机浏览器，不上传不进仓库）</p>
+          <input type="password" id="tokInput" placeholder="github_pat_…" autocomplete="off">
+          <button class="btn alt" id="tokSave" type="button">保存令牌</button>
+          <button class="btn alt" id="tokClear" type="button" style="display:none">清除令牌</button>
+        </div>
+      </div>
     </section>
   </main>
   <svg class="night" viewBox="0 0 240 90" role="img" aria-label="豆芽在小床上睡觉">
@@ -474,9 +526,10 @@ function countTo(el, target, dur){
   }
   requestAnimationFrame(step);
 }
-(function(){
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function renderMoney(list){
   var total = 0, buckA = 0, buckB = 0;
-  EXPENSES.forEach(function(x){
+  list.forEach(function(x){
     total += x.amt;
     if (x.bk === '产检') buckA += x.amt;
     if (x.bk === '挂号') buckB += x.amt;
@@ -486,11 +539,15 @@ function countTo(el, target, dur){
   $('buckB').textContent = '¥' + buckB.toFixed(2);
   setTimeout(function(){ $('buckA').style.width = Math.min(buckA / 3000 * 100, 100) + '%'; }, 500);
   var lg = $('ledger');
-  EXPENSES.slice().reverse().forEach(function(x){
+  lg.innerHTML = '';
+  list.slice().sort(function(a,b){ return a.d < b.d ? 1 : (a.d > b.d ? -1 : 0); }).forEach(function(x){
     var li = document.createElement('li');
-    li.innerHTML = '<span class="l-date">' + x.d + '</span><span class="l-item">' + x.item + '</span><span class="l-amt">¥' + x.amt.toFixed(2) + '</span><span class="l-bk">' + x.bk + '</span>';
+    li.innerHTML = '<span class="l-date">' + esc(x.d) + '</span><span class="l-item">' + esc(x.item) + '</span><span class="l-amt">¥' + x.amt.toFixed(2) + '</span><span class="l-bk">' + esc(x.bk) + '</span>';
     lg.appendChild(li);
   });
+}
+renderMoney(EXPENSES);
+(function(){
   var ch = $('chips');
   CHIPS.forEach(function(x){
     var li = document.createElement('li');
@@ -514,22 +571,159 @@ var DAILY = [
     life:'从这顿开始厨房交给爸爸，外卖点清淡的粥粉面',
     tip:'少食多餐，避开热食的气味；厨房这两天完全交给爸爸，他点的清淡外卖就别挑剔啦' }
 ];
-(function(){
+function renderDaily(days, instant){
   var box = $('daily');
-  DAILY.slice().reverse().forEach(function(x){
+  box.innerHTML = '';
+  days.slice().reverse().forEach(function(x){
     var dt = new Date(x.d + 'T00:00:00');
     var dd = Math.round((dt - LMP) / 86400000);
     var wk = Math.floor(dd / 7) + '周+' + (dd % 7);
+    var html = '<header><time>' + esc(x.d) + '</time><span class="wk">孕' + wk + '</span></header>';
+    if (x.mood) html += '<div class="d-row"><i>💗</i><div><b>今日心情</b><p>' + esc(x.mood) + '</p></div></div>';
+    if (x.body) html += '<div class="d-row"><i>🤰</i><div><b>身体状态</b><p>' + esc(x.body) + '</p></div></div>';
+    if (x.eat) html += '<div class="d-row"><i>🍚</i><div><b>今天这样吃</b><p>' + esc(x.eat) + '</p></div></div>';
+    if (x.life) html += '<div class="d-row"><i>🌿</i><div><b>这样过日子</b><p>' + esc(x.life) + '</p></div></div>';
+    if (x.note) html += '<div class="d-row"><i>📝</i><div><b>今日一句</b><p>' + esc(x.note) + '</p></div></div>';
+    if (x.tip) html += '<div class="d-row"><i>💡</i><div><b>今日小建议</b><p>' + esc(x.tip) + '</p></div></div>';
     var art = document.createElement('article');
-    art.className = 'day reveal';
-    art.innerHTML = '<header><time>' + x.d + '</time><span class="wk">孕' + wk + '</span></header>' +
-      '<div class="d-row"><i>💗</i><div><b>今日心情</b><p>' + x.mood + '</p></div></div>' +
-      '<div class="d-row"><i>🤰</i><div><b>身体状态</b><p>' + x.body + '</p></div></div>' +
-      '<div class="d-row"><i>🍚</i><div><b>今天这样吃</b><p>' + x.eat + '</p></div></div>' +
-      '<div class="d-row"><i>🌿</i><div><b>这样过日子</b><p>' + x.life + '</p></div></div>' +
-      '<div class="d-row"><i>💡</i><div><b>今日小建议</b><p>' + x.tip + '</p></div></div>';
+    art.className = 'day reveal' + (instant ? ' in' : '');
+    art.innerHTML = html;
     box.appendChild(art);
   });
+}
+renderDaily(DAILY);
+
+/* ===== 现场记一笔：app.json 存 GitHub · 令牌只在本机 ===== */
+var APP = { expenses: [], daily: [] };
+var REPO_API = 'https://api.github.com/repos/Gs-0620/daily-board/contents/app.json';
+function getToken(){ try { return localStorage.getItem('board_token') || ''; } catch(e){ return ''; } }
+function setTokUI(){
+  var has = !!getToken();
+  $('tokMsg').textContent = has ? '✓ 令牌已存本机浏览器（想换设备就再粘一次，互不影响）' : '第一次用：把 GitHub 细粒度令牌粘到下面（只存本机浏览器，不上传不进仓库）';
+  $('tokInput').style.display = has ? 'none' : 'block';
+  $('tokSave').style.display = has ? 'none' : 'inline-block';
+  $('tokClear').style.display = has ? 'inline-block' : 'none';
+}
+function ghHeaders(){ return { 'Authorization': 'Bearer ' + getToken(), 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' }; }
+function b64u(s){ return btoa(unescape(encodeURIComponent(s))); }
+function b64d(s){ return decodeURIComponent(escape(atob(s.replace(/\s/g, '')))); }
+function pstatusMsg(m){ $('pStatus').textContent = m; }
+
+function mergedExpenses(){ return EXPENSES.concat(APP.expenses || []); }
+function mergedDaily(){
+  var out = DAILY.map(function(x){ var o = {}; for (var k in x) o[k] = x[k]; return o; });
+  (APP.daily || []).forEach(function(a){
+    var hit = null;
+    for (var i = 0; i < out.length; i++){ if (out[i].d === a.d){ hit = out[i]; break; } }
+    if (hit){
+      if (a.mood) hit.mood = a.mood;
+      if (a.note) hit.note = a.note;
+      if (a.tip) hit.tip = a.tip;
+    } else {
+      out.push({ d: a.d, mood: a.mood, note: a.note });
+    }
+  });
+  return out;
+}
+function rerender(){ renderMoney(mergedExpenses()); renderDaily(mergedDaily(), true); }
+
+function fetchApp(){
+  fetch('app.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(j){ if (j && (j.expenses || j.daily)){ APP = { expenses: j.expenses || [], daily: j.daily || [] }; rerender(); } })
+    .catch(function(){});
+}
+fetchApp();
+
+function commitApp(label, attempt){
+  if (!getToken()){ pstatusMsg('本机已记上。想同步到全设备：在下方粘一次令牌'); return; }
+  attempt = attempt || 0;
+  fetch(REPO_API, { headers: ghHeaders() })
+    .then(function(r){ return r.json().then(function(j){ return { code: r.status, j: j }; }); })
+    .then(function(res){
+      var sha = null, base = { expenses: [], daily: [] };
+      if (res.code === 200 && res.j && res.j.content){
+        sha = res.j.sha;
+        try { base = JSON.parse(b64d(res.j.content)); } catch(e){}
+        base.expenses = base.expenses || []; base.daily = base.daily || [];
+      } else if (res.code !== 404){
+        throw new Error('读仓库失败（' + res.code + '）');
+      }
+      var remoteExp = base.expenses.filter(function(e){
+        return !(APP.expenses || []).some(function(m){ return m.d === e.d && m.item === e.item; });
+      });
+      var remoteDay = base.daily.filter(function(e){
+        return !(APP.daily || []).some(function(m){ return m.d === e.d; });
+      });
+      var out = {
+        expenses: remoteExp.concat(APP.expenses || []).sort(function(a,b){ return a.d < b.d ? -1 : 1; }),
+        daily: remoteDay.concat(APP.daily || []).sort(function(a,b){ return a.d < b.d ? -1 : 1; })
+      };
+      var body = { message: '页面填写：' + label, content: b64u(JSON.stringify(out, null, 2)) };
+      if (sha) body.sha = sha;
+      return fetch(REPO_API, { method: 'PUT', headers: ghHeaders(), body: JSON.stringify(body) })
+        .then(function(r){
+          if (r.status === 409 && attempt < 2){
+            return commitApp(label, attempt + 1);
+          }
+          return r.json().then(function(j){ return { code: r.status, j: j }; });
+        });
+    })
+    .then(function(res){
+      if (res && res.j && res.j.content){
+        pstatusMsg('✓ 已同步到 GitHub，约 1 分钟后全站自动更新');
+        fetchApp();
+      } else {
+        pstatusMsg('提交失败：' + ((res && res.j && res.j.message) || '未知错误'));
+      }
+    })
+    .catch(function(e){ pstatusMsg('提交出错：' + ((e && e.message) || '网络问题')); });
+}
+
+(function(){
+  $('panelToggle').addEventListener('click', function(){ $('panel').classList.toggle('open'); });
+  var wd = '日一二三四五六';
+  var wk = Math.floor(DAYS / 7) + '周+' + (DAYS % 7);
+  $('panelDate').textContent = '今天：' + fmt(TODAY) + ' 周' + wd[TODAY.getDay()] + ' · 孕' + wk + '（日期自动带入，可改）';
+  $('fDate').value = fmt(TODAY);
+  $('fExpBtn').addEventListener('click', function(){
+    var d = $('fDate').value || fmt(TODAY);
+    var item = $('fItem').value.trim();
+    var amt = parseFloat($('fAmt').value);
+    var bk = $('fBucket').value;
+    if (!item || !(amt > 0)){ pstatusMsg('账单要填项目名和大于 0 的金额'); return; }
+    APP.expenses = (APP.expenses || []).filter(function(x){ return !(x.d === d && x.item === item); });
+    APP.expenses.push({ d: d, item: item, amt: Math.round(amt * 100) / 100, bk: bk });
+    rerender();
+    $('fItem').value = ''; $('fAmt').value = '';
+    pstatusMsg('本机已记上，正在同步到 GitHub…');
+    commitApp('账单 ' + d + ' ' + item);
+  });
+  $('fMoodBtn').addEventListener('click', function(){
+    var d = $('fDate').value || fmt(TODAY);
+    var mood = $('fMood').value.trim();
+    var note = $('fNote').value.trim();
+    if (!mood){ pstatusMsg('心情写一句嘛'); return; }
+    APP.daily = (APP.daily || []).filter(function(x){ return x.d !== d; });
+    APP.daily.push({ d: d, mood: mood, note: note });
+    rerender();
+    $('fMood').value = ''; $('fNote').value = '';
+    pstatusMsg('本机已记上，正在同步到 GitHub…');
+    commitApp('心情 ' + d);
+  });
+  $('tokSave').addEventListener('click', function(){
+    var t = $('tokInput').value.trim();
+    if (t.indexOf('github_pat_') !== 0 && t.indexOf('ghp_') !== 0){ pstatusMsg('这不像 GitHub 令牌（应以 github_pat_ 开头）'); return; }
+    try { localStorage.setItem('board_token', t); } catch(e){}
+    setTokUI();
+    pstatusMsg('✓ 令牌已存本机');
+  });
+  $('tokClear').addEventListener('click', function(){
+    try { localStorage.removeItem('board_token'); } catch(e){}
+    setTokUI();
+    pstatusMsg('令牌已清除（页面数据不受影响）');
+  });
+  setTokUI();
 })();
 
 /* 滚动浮现 */
