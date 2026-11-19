@@ -161,6 +161,27 @@ body{background:var(--cream);color:var(--ink);font-family:-apple-system,"PingFan
  .strip span{font-size:19px;margin:0 8px}
 }
 
+/* ---------- 现场记录面板 ---------- */
+.panel{max-width:760px;margin:42px auto 0;background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden}
+.panel>.toggle{width:100%;padding:14px 20px;background:none;border:0;font:inherit;font-size:.95rem;color:var(--apricot-deep);cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.panel>.toggle span{font-size:.72rem;color:var(--sub)}
+.panel>.toggle::after{content:'▾';color:var(--sub)}
+.panel.open>.toggle::after{content:'▴'}
+.panel .pbody{display:none;padding:2px 20px 20px}
+.panel.open .pbody{display:block}
+.pdate{font-size:.78rem;color:var(--sub);margin-top:8px}
+.pgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}
+.fld{display:flex;flex-direction:column;gap:4px;font-size:.72rem;color:var(--sub)}
+.fld input,.fld select{padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:.85rem;background:#fffdf9;color:var(--ink)}
+.fld input:focus,.fld select:focus{outline:2px solid var(--apricot);outline-offset:1px;border-color:var(--apricot)}
+.btn{margin-top:12px;padding:9px 18px;border:0;border-radius:12px;background:linear-gradient(135deg,var(--apricot),var(--apricot-deep));color:#fff;font:inherit;font-size:.85rem;cursor:pointer;box-shadow:var(--shadow)}
+.btn.alt{background:#fffdf9;color:var(--apricot-deep);border:1px solid var(--apricot);box-shadow:none}
+.pstatus{margin-top:10px;font-size:.74rem;color:var(--sub);min-height:1.2em}
+.phr{border:0;border-top:1px dashed var(--line);margin:20px 0 4px}
+@media (max-width:700px){
+ .pgrid{grid-template-columns:1fr}
+}
+
 /* ---------- 其他 ---------- */
 footer{text-align:center;color:var(--sub);font-size:.8rem;margin-top:62px;padding-top:18px;border-top:1px solid var(--line)}
 footer .warm{color:#d8a35a;margin-top:8px;font-size:.82rem}
@@ -303,6 +324,36 @@ footer .tiny{font-size:.68rem;margin-top:4px}
       <ul id="ledger" class="ledger"></ul>
       <ul class="chips" id="chips"></ul>
     </section>
+
+    <section class="panel" id="panel">
+      <button class="toggle" id="panelToggle" type="button">✍️ 现场记一笔（账单 / 心情）<span>密码登录 · 保存后刷新即可同步</span></button>
+      <div class="pbody">
+        <div id="authBox">
+          <p id="authHint">正在连接记账服务…</p>
+          <label class="fld">共同记账密码<input type="password" id="familyPassword" minlength="10" maxlength="128" autocomplete="current-password" placeholder="输入你俩的共同密码"></label>
+          <button class="btn" id="loginBtn" type="button">登录记账</button>
+        </div>
+        <button class="btn alt" id="logoutBtn" type="button" hidden>退出记账</button>
+        <p class="pdate" id="panelDate">今天：</p>
+        <label class="fld">记录人<select id="fAuthor"><option>妈妈</option><option>爸爸</option></select></label>
+        <div class="pgrid">
+          <label class="fld">日期<input type="date" id="fDate"></label>
+          <label class="fld">账单项目<input id="fItem" placeholder="例：挂号（产科）" maxlength="40"></label>
+          <label class="fld">金额（元）<input type="number" id="fAmt" step="0.01" min="0" placeholder="0.00"></label>
+          <label class="fld">报销桶<select id="fBucket">
+            <option>产检</option><option>挂号</option><option>分娩</option><option>不报销</option>
+          </select></label>
+        </div>
+        <button class="btn" id="fExpBtn" type="button">＋ 记入账本</button>
+        <hr class="phr">
+        <div class="pgrid">
+          <label class="fld">今日心情<input id="fMood" placeholder="例：😀 挺好，就是有点困" maxlength="60"></label>
+          <label class="fld">一句话（可选）<input id="fNote" placeholder="想记就写一句" maxlength="120"></label>
+        </div>
+        <button class="btn alt" id="fMoodBtn" type="button">💗 记入今日心情</button>
+        <p class="pstatus" id="pStatus" role="status" aria-live="polite"></p>
+      </div>
+    </section>
   </main>
   <svg class="night" viewBox="0 0 240 90" role="img" aria-label="豆芽在小床上睡觉">
     <ellipse cx="120" cy="80" rx="88" ry="7" fill="#f2ddc9" opacity=".55"/>
@@ -325,7 +376,7 @@ footer .tiny{font-size:.68rem;margin-top:4px}
     <text x="158" y="30" font-size="9" font-style="italic" fill="#d8b586">z</text>
   </svg>
   <footer>
-    <p>本页随产检进展持续更新 · 记账记心情：发 MyFlicker 一句话即可 · 票据 PDF 并行归档</p>
+    <p>本页随产检进展持续更新 · 记账记心情：页面上直接填，或发 MyFlicker 一句话 · 票据 PDF 并行归档</p>
     <p class="warm">爸爸在外面挣钱记账，豆芽在里面安心长大 🌱</p>
     <p class="tiny">温馨版 · 由 MyFlicker 记录 · 孕周以 B 超校正为准</p>
   </footer>
@@ -531,6 +582,7 @@ function renderDaily(days, instant){
     if (x.body) html += '<div class="d-row"><i>🤰</i><div><b>身体状态</b><p>' + esc(x.body) + '</p></div></div>';
     if (x.eat) html += '<div class="d-row"><i>🍚</i><div><b>今天这样吃</b><p>' + esc(x.eat) + '</p></div></div>';
     if (x.life) html += '<div class="d-row"><i>🌿</i><div><b>这样过日子</b><p>' + esc(x.life) + '</p></div></div>';
+    if (x.author) html += '<div class="d-row"><i>✍️</i><div><b>记录人</b><p>' + esc(x.author) + '</p></div></div>';
     if (x.note) html += '<div class="d-row"><i>📝</i><div><b>今日一句</b><p>' + esc(x.note) + '</p></div></div>';
     if (x.tip) html += '<div class="d-row"><i>💡</i><div><b>今日小建议</b><p>' + esc(x.tip) + '</p></div></div>';
     var art = document.createElement('article');
@@ -540,6 +592,109 @@ function renderDaily(days, instant){
   });
 }
 renderDaily(DAILY);
+
+/* ===== 现场记一笔（免令牌）：页面提交 → 写入服务（钥匙在服务端）→ 仓库自动重建 ===== */
+var WRITE = { url: 'https://douya-records.392442392.workers.dev' };
+var SESSION = '';
+try { SESSION = localStorage.getItem('douya_session') || ''; } catch(e) {}
+var SETUP = new URLSearchParams(location.hash.slice(1)).get('setup') || '';
+if (SETUP) history.replaceState(null, '', location.pathname + location.search);
+var CONFIGURED = false;
+function authUI(){
+  $('authBox').hidden = !!SESSION;
+  $('logoutBtn').hidden = !SESSION;
+  $('fExpBtn').disabled = !SESSION;
+  $('fMoodBtn').disabled = !SESSION;
+}
+function rememberSession(value){ SESSION = value; try { if (value) localStorage.setItem('douya_session', value); else localStorage.removeItem('douya_session'); } catch(e) {} authUI(); }
+async function service(path, body){
+  var r = await fetch(WRITE.url + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SESSION }, body: body ? JSON.stringify(body) : undefined });
+  var j = await r.json();
+  if (!r.ok){ if (r.status === 401 && path !== '/login') rememberSession(''); throw new Error(j.msg || '连接失败'); }
+  return j;
+}
+var APP = { expenses: [], daily: [] };
+function pstatusMsg(m){ $('pStatus').textContent = m; }
+
+function mergedExpenses(){ return EXPENSES.concat(APP.expenses || []); }
+function mergedDaily(){
+  return DAILY.concat(APP.daily || []);
+}
+function rerender(){ renderMoney(mergedExpenses()); renderDaily(mergedDaily(), true); }
+
+async function fetchApp(){
+  if (!SESSION) return;
+  try { var j = await service('/records'); APP = j.app; rerender(); }
+  catch(e) { pstatusMsg(e.message); }
+}
+service('/status').then(function(j){
+  CONFIGURED = j.configured;
+  $('authHint').textContent = CONFIGURED ? '输入共同密码即可记账；登录状态记住30天。' : SETUP ? '首次设置：请设一个至少10个字符的共同密码，之后你俩都用它登录。' : '尚未设置密码，请爸爸使用专用设置链接。';
+  $('loginBtn').textContent = CONFIGURED ? '登录记账' : '设置密码并开始记账';
+  $('loginBtn').disabled = !CONFIGURED && !SETUP;
+}).catch(function(e){ pstatusMsg(e.message); });
+authUI();
+fetchApp();
+
+async function submitRecord(payload, button, fields){
+  button.disabled = true;
+  pstatusMsg('正在保存，请稍候…');
+  try {
+    var j = await service('/records', payload);
+    APP = j.app; rerender();
+    fields.forEach(function(id){ $(id).value = ''; });
+    pstatusMsg('✓ 已保存，另一台设备登录后刷新即可看到。');
+    return true;
+  } catch(e) { pstatusMsg('未保存：' + e.message + '。填写内容已保留，请重试。'); return false; }
+  finally { authUI(); }
+}
+
+(function(){
+  $('panel').classList.add('open');
+  $('panelToggle').addEventListener('click', function(){ $('panel').classList.toggle('open'); });
+  $('loginBtn').addEventListener('click', async function(){
+    this.disabled = true;
+    try {
+      var j = await service(CONFIGURED ? '/login' : '/setup', { password: $('familyPassword').value, setup: SETUP });
+      rememberSession(j.session); APP = j.app; rerender();
+      $('familyPassword').value = ''; SETUP = ''; CONFIGURED = true;
+      pstatusMsg('✓ 已登录，可以记录账单和心情。');
+    } catch(e){ pstatusMsg(e.message); }
+    finally { this.disabled = false; }
+  });
+  $('logoutBtn').addEventListener('click', async function(){
+    try { await service('/logout', {}); } catch(e) {}
+    rememberSession(''); APP = { expenses: [], daily: [] }; rerender();
+    $('authHint').textContent = '输入共同密码登录记账。';
+    $('loginBtn').textContent = '登录记账';
+  });
+  window.addEventListener('focus', fetchApp);
+  var wd = '日一二三四五六';
+  var wk = Math.floor(DAYS / 7) + '周+' + (DAYS % 7);
+  $('panelDate').textContent = '今天：' + fmt(TODAY) + ' 周' + wd[TODAY.getDay()] + ' · 孕' + wk + '（日期自动带入，可改）';
+  $('fDate').value = fmt(TODAY);
+  $('fExpBtn').addEventListener('click', function(){
+    var d = $('fDate').value || fmt(TODAY);
+    var item = $('fItem').value.trim();
+    var amt = parseFloat($('fAmt').value);
+    var bk = $('fBucket').value;
+    if (!item || !(amt > 0)){ pstatusMsg('账单要填项目名和大于 0 的金额'); return; }
+    var entry = { id: this.dataset.recordId || crypto.randomUUID(), d: d, author: $('fAuthor').value, item: item, amt: Math.round(amt * 100) / 100, bk: bk };
+    this.dataset.recordId = entry.id;
+    var button = this;
+    submitRecord({ type: 'expense', entry: entry }, button, ['fItem','fAmt']).then(function(ok){ if (ok) delete button.dataset.recordId; });
+  });
+  $('fMoodBtn').addEventListener('click', function(){
+    var d = $('fDate').value || fmt(TODAY);
+    var mood = $('fMood').value.trim();
+    var note = $('fNote').value.trim();
+    if (!mood){ pstatusMsg('心情写一句嘛'); return; }
+    var entry = { id: this.dataset.recordId || crypto.randomUUID(), d: d, author: $('fAuthor').value, mood: mood, note: note };
+    this.dataset.recordId = entry.id;
+    var button = this;
+    submitRecord({ type: 'mood', entry: entry }, button, ['fMood','fNote']).then(function(ok){ if (ok) delete button.dataset.recordId; });
+  });
+})();
 
 /* 滚动浮现 */
 (function(){
