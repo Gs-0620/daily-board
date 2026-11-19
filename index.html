@@ -598,8 +598,8 @@ var WRITE = { url: 'https://douya-records.392442392.workers.dev' };
 var SESSION = '';
 try { SESSION = localStorage.getItem('douya_session') || ''; } catch(e) {}
 var SETUP = new URLSearchParams(location.hash.slice(1)).get('setup') || '';
-if (SETUP) history.replaceState(null, '', location.pathname + location.search);
 var CONFIGURED = false;
+var SERVICE_READY = false;
 function authUI(){
   $('authBox').hidden = !!SESSION;
   $('logoutBtn').hidden = !SESSION;
@@ -608,10 +608,21 @@ function authUI(){
 }
 function rememberSession(value){ SESSION = value; try { if (value) localStorage.setItem('douya_session', value); else localStorage.removeItem('douya_session'); } catch(e) {} authUI(); }
 async function service(path, body){
-  var r = await fetch(WRITE.url + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + SESSION }, body: body ? JSON.stringify(body) : undefined });
-  var j = await r.json();
-  if (!r.ok){ if (r.status === 401 && path !== '/login') rememberSession(''); throw new Error(j.msg || '连接失败'); }
-  return j;
+  var controller = new AbortController();
+  var timeout = setTimeout(function(){ controller.abort(); }, 12000);
+  var headers = {};
+  if (body) headers['Content-Type'] = 'application/json';
+  if (SESSION) headers.Authorization = 'Bearer ' + SESSION;
+  try {
+    var r = await fetch(WRITE.url + path, { method: body ? 'POST' : 'GET', headers: headers, body: body ? JSON.stringify(body) : undefined, signal: controller.signal });
+    var j = await r.json();
+    if (!r.ok){ if (r.status === 401 && path !== '/login') rememberSession(''); throw new Error(j.msg || '连接失败'); }
+    return j;
+  } catch(e) {
+    if (e.name === 'AbortError') throw new Error('连接记账服务超时，请切换手机流量或Wi-Fi后重试');
+    if (e instanceof TypeError) throw new Error('当前网络无法连接记账服务，请切换手机流量或Wi-Fi后重试');
+    throw e;
+  } finally { clearTimeout(timeout); }
 }
 var APP = { expenses: [], daily: [] };
 function pstatusMsg(m){ $('pStatus').textContent = m; }
@@ -627,12 +638,24 @@ async function fetchApp(){
   try { var j = await service('/records'); APP = j.app; rerender(); }
   catch(e) { pstatusMsg(e.message); }
 }
-service('/status').then(function(j){
-  CONFIGURED = j.configured;
-  $('authHint').textContent = CONFIGURED ? '输入共同密码即可记账；登录状态记住30天。' : SETUP ? '首次设置：请设一个至少10个字符的共同密码，之后你俩都用它登录。' : '尚未设置密码，请爸爸使用专用设置链接。';
-  $('loginBtn').textContent = CONFIGURED ? '登录记账' : '设置密码并开始记账';
-  $('loginBtn').disabled = !CONFIGURED && !SETUP;
-}).catch(function(e){ pstatusMsg(e.message); });
+async function connectService(){
+  SERVICE_READY = false;
+  $('loginBtn').disabled = true;
+  $('authHint').textContent = '正在连接记账服务（最多12秒）…';
+  try {
+    var j = await service('/status');
+    CONFIGURED = j.configured; SERVICE_READY = true;
+    $('authHint').textContent = CONFIGURED ? '输入共同密码即可记账；登录状态记住30天。' : SETUP ? '首次设置：请设一个至少10个字符的共同密码，之后你俩都用它登录。' : '尚未设置密码，请爸爸使用专用设置链接。';
+    $('loginBtn').textContent = CONFIGURED ? '登录记账' : '设置密码并开始记账';
+    $('loginBtn').disabled = !CONFIGURED && !SETUP;
+  } catch(e) {
+    $('authHint').textContent = e.message;
+    $('loginBtn').textContent = '重试连接';
+    $('loginBtn').disabled = false;
+    pstatusMsg('尚未连接，不会保存任何记录。');
+  }
+}
+connectService();
 authUI();
 fetchApp();
 
@@ -653,11 +676,13 @@ async function submitRecord(payload, button, fields){
   $('panel').classList.add('open');
   $('panelToggle').addEventListener('click', function(){ $('panel').classList.toggle('open'); });
   $('loginBtn').addEventListener('click', async function(){
+    if (!SERVICE_READY){ await connectService(); return; }
     this.disabled = true;
     try {
       var j = await service(CONFIGURED ? '/login' : '/setup', { password: $('familyPassword').value, setup: SETUP });
       rememberSession(j.session); APP = j.app; rerender();
       $('familyPassword').value = ''; SETUP = ''; CONFIGURED = true;
+      history.replaceState(null, '', location.pathname + location.search);
       pstatusMsg('✓ 已登录，可以记录账单和心情。');
     } catch(e){ pstatusMsg(e.message); }
     finally { this.disabled = false; }
