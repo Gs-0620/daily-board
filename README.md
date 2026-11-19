@@ -1,8 +1,9 @@
-# daily-board · 我们仨的前传
+# daily-board
 
-孕产时间线与账本页面。
+- `index.html` — 孕产时间线 · 温馨版（主页面，星月夜灯风）
+- `classic.html` — 孕产时间线 · 原版（米纸红章风）
+- `board.html` — 每日信息板（数据在 `data.json`）
 
-- `index.html` — 温馨版（主页面 · 星月夜灯风）
-- `classic.html` — 原版（米纸红章风）
+推送到 `main` 分支后自动发布到 GitHub Pages。
 
-更新：改 index.html 数据区（CONFIG / EVENTS / EXPENSES / CHIPS / DAILY）→ commit → push。
+公网地址：<https://gs-0620.github.io/daily-board/>

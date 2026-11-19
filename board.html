@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>每日信息板 · Daily Board</title>
+<script>window.adaptMobile = true;</script>
+<script src="https://static.yximgs.com/udata/pkg/fe/yoda@2.0.17.min.js"></script>
+<style>
+  :root{
+    --paper:#f6f1e7;
+    --paper-deep:#efe8d8;
+    --ink:#2b2823;
+    --ink-soft:#6d675c;
+    --ink-faint:#a49d8f;
+    --accent:#c8451f;
+    --accent-soft:#e8d9c4;
+    --hairline:#d8cfbc;
+    --card:#fdfaf3;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-text-size-adjust:100%;}
+  html{scroll-behavior:smooth;}
+  body{
+    font-family:"Songti SC","Noto Serif SC","STSong",Georgia,"Times New Roman",serif;
+    background:var(--paper);
+    color:var(--ink);
+    line-height:1.7;
+    min-height:100vh;
+    position:relative;
+  }
+  /* 纸张噪点纹理 */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 32px;position:relative;z-index:1;}
+
+  /* ===== 顶栏 ===== */
+  header{
+    border-bottom:2px solid var(--ink);
+    padding:22px 0 16px;
+    display:flex;justify-content:space-between;align-items:baseline;
+    flex-wrap:wrap;gap:8px;
+  }
+  .masthead{display:flex;align-items:baseline;gap:14px;}
+  .masthead .seal{
+    width:30px;height:30px;background:var(--accent);color:var(--paper);
+    display:flex;align-items:center;justify-content:center;
+    font-size:15px;font-weight:700;border-radius:3px;
+    letter-spacing:0;
+  }
+  .masthead .name{font-size:19px;font-weight:700;letter-spacing:6px;}
+  .masthead .en{font-size:11px;color:var(--ink-faint);letter-spacing:3px;font-family:Georgia,serif;font-style:italic;}
+  .meta{font-size:12px;color:var(--ink-soft);letter-spacing:1px;}
+  .meta b{color:var(--accent);font-weight:700;}
+
+  /* ===== 日期主视觉 ===== */
+  .hero{
+    padding:44px 0 34px;
+    border-bottom:1px solid var(--hairline);
+    display:flex;align-items:flex-end;justify-content:space-between;
+    gap:28px;flex-wrap:wrap;
+  }
+  .date-big{
+    font-size:clamp(88px,16vw,168px);
+    line-height:.88;font-weight:900;letter-spacing:-4px;
+    color:var(--ink);
+  }
+  .date-big small{font-size:.32em;font-weight:400;letter-spacing:2px;color:var(--accent);vertical-align:super;}
+  .date-side{display:flex;flex-direction:column;gap:6px;padding-bottom:10px;}
+  .weekday{font-size:22px;font-weight:700;letter-spacing:10px;}
+  .tagline{font-size:14px;color:var(--ink-soft);letter-spacing:1px;max-width:420px;border-left:3px solid var(--accent);padding-left:12px;}
+
+  /* ===== 主体布局 ===== */
+  main{
+    display:grid;grid-template-columns:1fr 320px;gap:40px;
+    padding:38px 0 24px;
+  }
+  .section-title{
+    font-size:13px;letter-spacing:6px;color:var(--accent);font-weight:700;
+    display:flex;align-items:center;gap:12px;margin-bottom:20px;
+  }
+  .section-title::after{content:"";flex:1;height:1px;background:var(--hairline);}
+
+  /* 关键信息条目 */
+  .entry{
+    padding:20px 0 18px;border-bottom:1px solid var(--hairline);
+    display:grid;grid-template-columns:52px 1fr;gap:18px;
+  }
+  .entry:last-child{border-bottom:none;}
+  .entry-no{
+    font-family:Georgia,serif;font-size:30px;font-weight:700;
+    color:var(--accent);line-height:1;opacity:.85;
+  }
+  .entry-tag{
+    display:inline-block;font-size:11px;letter-spacing:2px;color:var(--paper);
+    background:var(--ink);padding:2px 10px;border-radius:2px;margin-bottom:8px;
+  }
+  .entry-title{font-size:19px;font-weight:700;margin-bottom:6px;letter-spacing:.5px;}
+  .entry-content{font-size:15px;color:var(--ink-soft);white-space:pre-line;}
+  .entry-time{font-size:11px;color:var(--ink-faint);letter-spacing:1px;margin-top:8px;font-family:Georgia,serif;}
+
+  /* 侧栏卡片 */
+  .side{display:flex;flex-direction:column;gap:22px;}
+  .card{
+    background:var(--card);border:1px solid var(--hairline);
+    border-radius:4px;padding:20px 22px;position:relative;
+    box-shadow:0 1px 0 rgba(43,40,35,.05);
+  }
+  .card-title{
+    font-size:11px;letter-spacing:4px;color:var(--ink-faint);font-weight:700;
+    margin-bottom:12px;display:flex;align-items:center;gap:8px;
+  }
+  .card-title::before{content:"";width:7px;height:7px;background:var(--accent);border-radius:50%;}
+  .weather-temp{font-size:52px;font-weight:900;line-height:1;letter-spacing:-2px;}
+  .weather-temp sup{font-size:.4em;font-weight:400;color:var(--ink-soft);letter-spacing:0;}
+  .weather-desc{font-size:16px;font-weight:700;color:var(--accent);margin:6px 0 10px;letter-spacing:2px;}
+  .weather-city{font-size:12px;color:var(--ink-soft);letter-spacing:2px;margin-bottom:10px;}
+  .weather-extra{display:flex;gap:0;border-top:1px solid var(--hairline);padding-top:10px;margin-top:6px;}
+  .weather-extra div{flex:1;text-align:center;}
+  .weather-extra div+div{border-left:1px solid var(--hairline);}
+  .weather-extra .k{font-size:10px;color:var(--ink-faint);letter-spacing:1px;}
+  .weather-extra .v{font-size:15px;font-weight:700;font-family:Georgia,serif;}
+  .mood-word{font-size:34px;font-weight:900;letter-spacing:6px;line-height:1.3;}
+  .mood-sub{font-size:13px;color:var(--ink-soft);margin-top:8px;}
+  .advice-text{font-size:15px;font-weight:700;letter-spacing:.5px;line-height:1.9;}
+
+  footer{
+    border-top:2px solid var(--ink);margin-top:14px;
+    padding:18px 0 30px;display:flex;justify-content:space-between;
+    flex-wrap:wrap;gap:10px;font-size:12px;color:var(--ink-faint);letter-spacing:1px;
+  }
+
+  /* ===== 响应式 ===== */
+  @media (max-width:768px){
+    .wrap{padding:0 18px;}
+    main{grid-template-columns:1fr;gap:28px;padding:26px 0 10px;}
+    .side{flex-direction:column;}
+    .hero{padding:30px 0 24px;}
+    .date-side{padding-bottom:4px;}
+    .tagline{max-width:100%;}
+    .entry{grid-template-columns:40px 1fr;gap:12px;}
+    .weather-temp{font-size:44px;}
+    .mood-word{font-size:28px;}
+    .masthead .name{font-size:16px;letter-spacing:4px;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important;}
+  }
+  .fade-in{animation:rise .6s cubic-bezier(.22,.61,.36,1) both;}
+  @keyframes rise{from{transform:translateY(14px);}to{transform:none;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="masthead">
+      <div class="seal" id="sealChar">日</div>
+      <div>
+        <div class="name" id="boardName">每日信息板</div>
+        <div class="en">DAILY BOARD</div>
+      </div>
+    </div>
+    <div class="meta">最后更新 <b id="updatedAt">—</b></div>
+  </header>
+
+  <section class="hero fade-in">
+    <div class="date-big" id="dateBig">—</div>
+    <div class="date-side">
+      <div class="weekday" id="weekday">—</div>
+      <div class="tagline" id="tagline">—</div>
+    </div>
+  </section>
+
+  <main>
+    <section class="fade-in" style="animation-delay:.08s">
+      <div class="section-title">关键信息</div>
+      <div id="entries"></div>
+    </section>
+
+    <aside class="side">
+      <div class="card fade-in" style="animation-delay:.16s">
+        <div class="card-title">今日天气</div>
+        <div class="weather-city" id="wCity">—</div>
+        <div class="weather-temp" id="wTemp">—</div>
+        <div class="weather-desc" id="wDesc">—</div>
+        <div class="weather-extra">
+          <div><div class="k">体感</div><div class="v" id="wFeel">—</div></div>
+          <div><div class="k">湿度</div><div class="v" id="wHum">—</div></div>
+          <div><div class="k">风速</div><div class="v" id="wWind">—</div></div>
+        </div>
+      </div>
+
+      <div class="card fade-in" style="animation-delay:.24s">
+        <div class="card-title">今日心情</div>
+        <div class="mood-word" id="moodWord">—</div>
+        <div class="mood-sub" id="moodSub">—</div>
+      </div>
+
+      <div class="card fade-in" style="animation-delay:.32s">
+        <div class="card-title">每日建议</div>
+        <div class="advice-text" id="adviceText">—</div>
+      </div>
+    </aside>
+  </main>
+
+  <footer>
+    <div id="footLeft">每日 0 点自动更新 · 关键信息由站长每日发布</div>
+    <div>Powered by Daily Board</div>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ===== 内置默认数据：data.json 加载失败时兜底（内容与其保持一致） ===== */
+  var DEFAULT_DATA = {
+    "boardName": "每日信息板",
+    "tagline": "每天一点关键信息，生活保持有条不紊。",
+    "updatedAt": "2026-11-19 14:20",
+    "weather": { "city": "北京", "latitude": 39.9042, "longitude": 116.4074 },
+    "moods": [
+      {"word":"元气满满","sub":"新的一天，带着热气出发"},
+      {"word":"平静安稳","sub":"像一杯温水，不烫不凉刚刚好"},
+      {"word":"温柔坚定","sub":"对世界温柔，对自己坚定"},
+      {"word":"专注投入","sub":"把今天过成一件完成度很高的作品"},
+      {"word":"松弛有度","sub":"紧绷的弦，也需要偶尔松一松"},
+      {"word":"充满好奇","sub":"保持提问，就保持年轻"},
+      {"word":"心怀期待","sub":"小期待是日常最好的调味"},
+      {"word":"稳步向前","sub":"不快不慢，走的人最远"}
+    ],
+    "advices": [
+      "今天试着提前十五分钟睡觉，明早的你会感谢现在的决定。",
+      "给很久没联系的朋友发一条消息，关系的温度需要偶尔添柴。",
+      "喝水别等渴了才喝，手边放一杯温水，顺手就完成了。",
+      "挑一件拖了很久的小事，今天把它关掉，轻松感立竿见影。",
+      "晚饭后散步二十分钟，身体和情绪都会给你正面反馈。",
+      "睡前把手机放远一点，留给大脑十分钟安静的时间。",
+      "今天对遇到的每个人都多说一句谢谢，善意会回流的。",
+      "整理一下桌面或文件，清空的是环境，理顺的是心情。"
+    ],
+    "highlights": [
+      {
+        "tag": "站长的话",
+        "title": "信息板上线啦",
+        "content": "这里是每天更新的关键信息区。\n站长每天会把最重要的事情放在这里，打开这个页面就能看到最新内容。",
+        "time": "2026-11-19"
+      }
+    ]
+  };
+
+  var data = DEFAULT_DATA;
+
+  /* ===== 工具 ===== */
+  function $(id){ return document.getElementById(id); }
+  function esc(s){
+    return String(s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function pad(n){ return n < 10 ? "0" + n : "" + n; }
+  function dayOfYear(d){
+    var start = new Date(d.getFullYear(), 0, 0);
+    return Math.floor((d - start) / 86400000);
+  }
+
+  /* ===== 日期渲染 ===== */
+  function renderDate(){
+    var now = new Date();
+    var m = now.getMonth() + 1, d = now.getDate();
+    $("dateBig").innerHTML = pad(m) + "<small>月</small>" + pad(d) + "<small>日</small>";
+    var weeks = ["星期日","星期一","星期二","星期三","星期四","星期五","星期六"];
+    var wd = weeks[now.getDay()];
+    var lunarMonths = ["正月","二月","三月","四月","五月","六月","七月","八月","九月","十月","冬月","腊月"];
+    var mIdx = Math.min(now.getMonth(), 11);
+    var approxLunar = "农历" + lunarMonths[mIdx] + "（以手机日历为准）";
+    $("weekday").textContent = wd + " · " + approxLunar;
+    $("sealChar").textContent = pad(d);
+    return dayOfYear(now);
+  }
+
+  /* ===== 内容渲染 ===== */
+  function renderContent(doy){
+    document.title = data.boardName + " · Daily Board";
+    $("boardName").textContent = data.boardName;
+    $("updatedAt").textContent = data.updatedAt;
+    $("tagline").textContent = data.tagline;
+    $("footLeft").textContent = "每日 0 点自动更新 · 关键信息由站长每日发布（更新于 " + data.updatedAt + "）";
+
+    /* 关键信息 */
+    var list = data.highlights || [];
+    var html = "";
+    for (var i = 0; i < list.length; i++){
+      var it = list[i];
+      html += '<div class="entry">'
+        + '<div class="entry-no">' + pad(i + 1) + '</div>'
+        + '<div>'
+        + '<span class="entry-tag">' + esc(it.tag || "信息") + '</span>'
+        + '<div class="entry-title">' + esc(it.title) + '</div>'
+        + '<div class="entry-content">' + esc(it.content) + '</div>'
+        + (it.time ? '<div class="entry-time">' + esc(it.time) + '</div>' : '')
+        + '</div></div>';
+    }
+    if (!html){ html = '<div class="entry"><div class="entry-no">··</div><div><div class="entry-content">今天暂时没有新的关键信息，晚些时候更新。</div></div></div>'; }
+    $("entries").innerHTML = html;
+
+    /* 心情 / 建议：按当日序号轮换，0 点自动切换 */
+    var moods = data.moods || [];
+    var advices = data.advices || [];
+    if (moods.length){
+      var m = moods[doy % moods.length];
+      $("moodWord").textContent = m.word;
+      $("moodSub").textContent = m.sub || "";
+    }
+    if (advices.length){
+      $("adviceText").textContent = advices[doy % advices.length];
+    }
+  }
+
+  /* ===== 天气：OPEN-Meteo（免费公网接口，无需密钥） ===== */
+  var WMO = {
+    0:["晴","万里无云"],1:["晴间少云","云很少"],2:["多云","云量适中"],3:["阴","天空被云覆盖"],
+    45:["雾","出行注意能见度"],48:["雾凇","凝雾天气"],
+    51:["毛毛雨","微弱降水"],53:["毛毛雨","中等强度"],55:["毛毛雨","较密"],
+    56:["冻毛毛雨","路面可能结冰"],57:["冻毛毛雨","较强"],
+    61:["小雨","记得带伞"],63:["中雨","出门带伞"],65:["大雨","注意防涝防滑"],
+    66:["冻雨","谨慎出行"],67:["冻雨","较强冻雨"],
+    71:["小雪","注意保暖"],73:["中雪","道路湿滑"],75:["大雪","尽量减少外出"],
+    77:["雪粒","细雪飘落"],
+    80:["阵雨","短时降雨"],81:["阵雨","中等强度"],82:["强阵雨","注意躲避"],
+    85:["阵雪","短时降雪"],86:["阵雪","较强降雪"],
+    95:["雷阵雨","远离空旷地带"],96:["雷雨冰雹","注意安全"],99:["雷雨冰雹","强对流天气"]
+  };
+  function renderWeather(){
+    var w = data.weather || DEFAULT_DATA.weather;
+    $("wCity").textContent = "城市 · " + w.city;
+    $("wTemp").innerHTML = '--<sup>°C</sup>';
+    $("wDesc").textContent = "获取中…";
+    var url = "https://api.open-meteo.com/v1/forecast?latitude=" + encodeURIComponent(w.latitude)
+      + "&longitude=" + encodeURIComponent(w.longitude)
+      + "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code"
+      + "&timezone=auto";
+    fetch(url, { cache: "no-store" })
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        var c = j && j.current;
+        if (!c) throw new Error("empty");
+        var code = WMO[c.weather_code] || ["多云", "天气良好"];
+        $("wTemp").innerHTML = Math.round(c.temperature_2m) + "<sup>°C</sup>";
+        $("wDesc").textContent = code[0] + " · " + code[1];
+        $("wFeel").textContent = Math.round(c.apparent_temperature) + "°";
+        $("wHum").textContent = Math.round(c.relative_humidity_2m) + "%";
+        $("wWind").textContent = Math.round(c.wind_speed_10m) + " km/h";
+      })
+      .catch(function(){
+        $("wTemp").innerHTML = "--<sup>°C</sup>";
+        $("wDesc").textContent = "天气服务暂时不可用";
+        $("wFeel").textContent = "--"; $("wHum").textContent = "--"; $("wWind").textContent = "--";
+      });
+  }
+
+  /* ===== 启动 ===== */
+  var doy = renderDate();
+  renderContent(doy);
+  renderWeather();
+
+  /* 加载外部 data.json（部署后生效；打开页面即读取最新内容） */
+  fetch("data.json?v=" + encodeURIComponent(data.updatedAt || ""), { cache: "no-store" })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(j){
+      if (!j) return;
+      data = j;
+      renderContent(doy);
+      renderWeather();
+    })
+    .catch(function(){ /* 使用内置默认数据 */ });
+
+  /* 跨零点自动刷新：停留中过了 0 点，自动切换日期/心情/建议 */
+  var checkTimer = setInterval(function(){
+    var now = new Date();
+    var newDoy = dayOfYear(now);
+    if (newDoy !== doy){
+      doy = newDoy;
+      renderDate();
+      renderContent(doy);
+    }
+  }, 60000);
+})();
+</script>
+</body>
+</html>
